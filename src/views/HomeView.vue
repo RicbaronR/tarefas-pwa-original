@@ -63,8 +63,8 @@ onMounted(() => {
   store.fetchTasks();
 });
 
-function handleAdd(title) {
-  store.addTask(title);
+function handleAdd(payload) {
+  store.addTask(payload);
 }
 
 
@@ -89,6 +89,7 @@ function handleRemove(id) {
   if (editingTask.value?.id === id) editingTask.value = null;
   store.removeTask(id);
 }
+
 </script>
 
 <style scoped>

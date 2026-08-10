@@ -14,38 +14,49 @@ const newTask = ref('');
 const previewUrl = ref(null)
 const imgAttachmentKey = ref(null)
 const uploading = ref(false)
+// const isMobileDevice = ref(
+//   !window.matchMedia('(pointer: fine)').matches,
+// );
+
 
 
 watch(
   () => props.editingTask,
   (task) => {
     newTask.value = task ? task.title : '';
+    if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
     previewUrl.value = null;
     imgAttachmentKey.value = null;
   },
 );
 
 
+
 function handleSubmit() {
   if (!newTask.value.trim()) return;
+
+  const payload = {
+    title: newTask.value.trim(),
+    imgAttachmentKey: imgAttachmentKey.value,
+  };
+
   if (props.editingTask) {
-    emit(
-      'update',
-      props.editingTask.id,
-      newTask.value.trim(),
-      imgAttachmentKey.value,
-    );
+    emit('update', props.editingTask.id, payload);
   } else {
-    emit('add', newTask.value.trim());
+    emit('add', payload);
   }
+
   newTask.value = '';
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
   previewUrl.value = null;
   imgAttachmentKey.value = null;
 }
 
 
+
 function handleCancel() {
   newTask.value = '';
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
   previewUrl.value = null;
   imgAttachmentKey.value = null;
   emit('cancel');
@@ -55,6 +66,7 @@ function handleCancel() {
 async function handleImageChange(event) {
   const file = event.target.files[0];
   if (!file) return;
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
   previewUrl.value = URL.createObjectURL(file);
   uploading.value = true;
   try {
@@ -67,6 +79,26 @@ async function handleImageChange(event) {
   } finally {
     uploading.value = false;
   }
+}
+
+import CameraCapture from './CameraCapture.vue'
+const showCameraCapture = ref(false)
+
+function handleCameraCapture(file) {
+  previewUrl.value = URL.createObjectURL(file);
+  uploading.value = true;
+  tasksApi
+    .uploadImage(file)
+    .then((response) => {
+      imgAttachmentKey.value = response.data.attachment_key;
+    })
+    .catch((err) => {
+      console.error(err);
+      previewUrl.value = null;
+    })
+    .finally(() => {
+      uploading.value = false;
+    });
 }
 </script>
 
@@ -92,7 +124,7 @@ async function handleImageChange(event) {
       </button>
     </div>
 
-    <div v-if="editingTask" class="image-section">
+    <!-- <div class="image-section">
       <img
         v-if="previewUrl || editingTask.img_url"
         :src="previewUrl || editingTask.img_url"
@@ -102,26 +134,78 @@ async function handleImageChange(event) {
       <label class="image-label" :class="{ disabled: uploading }">
         <span v-if="uploading" class="upload-status">Enviando...</span>
         <span v-else>
-          {{
-            previewUrl || editingTask.img_url
-              ? 'Trocar imagem'
-              : 'Adicionar imagem'
-          }}
-        </span>
+      {{ previewUrl || editingTask?.img_url
+        ? 'Trocar imagem'
+        : isMobileDevice
+          ? 'Fotografar'
+          : 'Adicionar imagem'
+      }}
+     </span>
+        
         <input
           type="file"
           accept="image/jpeg,image/png"
+          capture="environment"
           class="image-input"
           :disabled="uploading"
           @change="handleImageChange"
         />
       </label>
-    </div>
+      <p class="image-help">
+      Em celular, o botão pode abrir a câmera.
+      Em notebook, abre o seletor de arquivos.
+      </p>
+    </div> -->
+    <div class="image-section">
+  <!-- Preview da imagem já salva ou capturada -->
+  <img
+    v-if="previewUrl || editingTask?.img_url"
+    :src="previewUrl || editingTask?.img_url"
+    class="image-preview"
+    alt="Imagem da tarefa"
+  />
+
+  <!-- Input com capture (padrão) -->
+  <label class="image-label" :class="{ disabled: uploading }">
+    <span v-if="uploading" class="upload-status">Enviando...</span>
+    <span v-else>Adicionar imagem</span>
+    <input
+      type="file"
+      accept="image/jpeg,image/png"
+      capture="environment"
+      class="image-input"
+      :disabled="uploading"
+      @change="handleImageChange"
+    />
+  </label>
+
+  <!-- Alternativa com preview ao vivo -->
+  <button
+    type="button"
+    class="task-button-secondary"
+    @click="showCameraCapture = !showCameraCapture"
+  >
+    {{ showCameraCapture ? 'Fechar câmera' : 'Abrir preview ao vivo' }}
+  </button>
+
+  <CameraCapture
+    v-if="showCameraCapture"
+    @captured="handleCameraCapture"
+  />
+</div>
+    
   </form>
+  
 </template>
 
 
 <style scoped>
+.image-help {
+  font-size: 0.75rem;
+  color: #999;
+  margin: 0;
+  flex-basis: 100%;
+}
 .task-form {
   display: flex;
   gap: 8px;

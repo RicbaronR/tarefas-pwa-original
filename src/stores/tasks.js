@@ -29,6 +29,7 @@ export const useTasksStore = defineStore('tasks', () => {
     error.value = null;
     try {
       const response = await tasksApi.create(payload)
+      console.log('TAREFA CRIADA:', response.data)
       tasks.value.push(response.data)
     } catch (err) {
       error.value = 'Erro ao adicionar tarefa.'

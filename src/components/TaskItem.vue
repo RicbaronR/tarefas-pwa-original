@@ -90,7 +90,9 @@ defineEmits(['toggle', 'remove', 'edit']);
 }
 
 .task-edit:hover {
-  text-decoration: underline;
+  background-color: #d0e4f7;
+  padding: 4px 8px;
+  border-radius: 4px;
 }
 
 .task-remove {
@@ -103,14 +105,17 @@ defineEmits(['toggle', 'remove', 'edit']);
 }
 
 .task-remove:hover {
-  text-decoration: underline;
+  background-color: #f8a69d;
+  padding: 8px 16px;
+  border-radius: 4px;
 }
 .task-thumbnail {
-  width: 44px;
-  height: 44px;
+  width: 50px;
+  height: 50px;
   object-fit: cover;
   border-radius: 6px;
   border: 1px solid #eee;
   flex-shrink: 0;
+  margin-right: 12px;
 }
 </style>

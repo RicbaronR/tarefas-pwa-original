@@ -104,11 +104,7 @@ defineEmits(['toggle', 'remove', 'edit']);
   padding: 4px 8px;
 }
 
-.task-remove:hover {
-  background-color: #f8a69d;
-  padding: 8px 16px;
-  border-radius: 4px;
-}
+
 .task-thumbnail {
   width: 50px;
   height: 50px;

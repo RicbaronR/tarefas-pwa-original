@@ -1,4 +1,3 @@
-```vue
 <template>
   <form class="task-form" @submit.prevent="handleSubmit">
     <div class="task-row">
@@ -12,7 +11,7 @@
       <button
         type="submit"
         class="task-button"
-        :disabled="uploading"
+        :disabled="uploading || loadingLocation"
       >
         {{ editingTask ? 'Alterar' : 'Adicionar' }}
       </button>
@@ -27,8 +26,50 @@
       </button>
     </div>
 
+    
+    <div class="location-section">
+      <div class="location-controls">
+        <button
+          type="button"
+          class="location-button"
+          :disabled="loadingLocation"
+          @click="handleGetLocation"
+        >
+          {{ loadingLocation ? 'Obtendo localização...' : '📍 Capturar Localização' }}
+        </button>
+
+        <button
+          v-if="location"
+          type="button"
+          class="location-button-remove"
+          @click="clearLocation"
+        >
+          Remover Localização
+        </button>
+      </div>
+
+      <p v-if="locationError" class="location-error">
+        {{ locationError }}
+      </p>
+
+      <div v-if="location" class="location-info">
+        <p class="location-label-text">
+          <strong>Endereço:</strong> {{ location.label || 'Buscando endereço...' }}
+        </p>
+        <p class="location-coords">
+          <small>
+            Lat: {{ location.latitude.toFixed(4) }}, Lon: {{ location.longitude.toFixed(4) }}
+            <span v-if="location.accuracy">(±{{ Math.round(location.accuracy) }}m)</span>
+          </small>
+        </p>
+
+       
+        <TaskLocationMap :location="location" />
+      </div>
+    </div>
+
     <div class="image-section">
-      <!-- Preview da imagem -->
+     
       <img
         v-if="previewUrl || editingTask?.img_url"
         :src="previewUrl || editingTask?.img_url"
@@ -36,7 +77,7 @@
         alt="Imagem da tarefa"
       />
 
-      <!-- Selecionar imagem / câmera do celular -->
+      
       <label
         class="image-label"
         :class="{ disabled: uploading }"
@@ -66,7 +107,7 @@
         />
       </label>
 
-      <!-- Câmera com getUserMedia -->
+      
       <button
         type="button"
         class="task-button-camera"
@@ -80,7 +121,7 @@
         }}
       </button>
 
-      <!-- Componente da câmera -->
+    
       <CameraCapture
         v-if="showCameraCapture"
         @captured="handleCameraCapture"
@@ -97,7 +138,11 @@
 <script setup>
 import { ref, watch } from 'vue'
 import tasksApi from '../api/tasksApi.js'
+import geocodingApi from '../api/geocodingApi.js'
+import { buildLocationPayload } from '../utils/location.js'
+import { useGeolocation } from '../composables/useGeolocation.js'
 import CameraCapture from './CameraCapture.vue'
+import TaskLocationMap from './TaskLocationMap.vue'
 
 const props = defineProps({
   editingTask: {
@@ -118,6 +163,17 @@ const imgAttachmentKey = ref(null)
 const uploading = ref(false)
 const showCameraCapture = ref(false)
 
+// Composable de Geolocalização (Passo 2)
+const {
+  loadingLocation,
+  locationError,
+  location,
+  setLocationFromTask,
+  clearLocation,
+  setLocationLabel,
+  requestCurrentLocation,
+} = useGeolocation()
+
 watch(
   () => props.editingTask,
   (task) => {
@@ -130,8 +186,29 @@ watch(
     previewUrl.value = null
     imgAttachmentKey.value = null
     showCameraCapture.value = false
+
+    // Carrega a localização da tarefa em edição
+    setLocationFromTask(task)
   },
+  { immediate: true }
 )
+
+// Captura localização e faz geocodificação reversa (Passo 5)
+async function handleGetLocation() {
+  const captured = await requestCurrentLocation()
+  if (!captured) return
+
+  try {
+    const address = await geocodingApi.reverse(
+      captured.latitude,
+      captured.longitude,
+    )
+    setLocationLabel(address?.label)
+  } catch {
+    locationError.value =
+      'Localização obtida, mas não foi possível identificar a rua.'
+  }
+}
 
 async function handleImageChange(event) {
   const file = event.target.files[0]
@@ -194,9 +271,13 @@ async function handleCameraCapture(file) {
 function handleSubmit() {
   if (!newTask.value.trim()) return
 
+  // Converte a localização para o formato do backend (Passo 3 & 5)
+  const locationPayload = buildLocationPayload(location.value)
+
   const payload = {
     title: newTask.value.trim(),
     img_attachment_key: imgAttachmentKey.value,
+    ...locationPayload,
   }
 
   if (props.editingTask) {
@@ -210,9 +291,13 @@ function handleSubmit() {
   }
 
   newTask.value = ''
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+  }
   previewUrl.value = null
   imgAttachmentKey.value = null
   showCameraCapture.value = false
+  clearLocation()
 }
 
 function handleCancel() {
@@ -225,6 +310,7 @@ function handleCancel() {
   previewUrl.value = null
   imgAttachmentKey.value = null
   showCameraCapture.value = false
+  clearLocation()
 
   emit('cancel')
 }
@@ -290,6 +376,80 @@ function handleCancel() {
   border-color: #aaa;
 }
 
+/* Estilos da Geolocalização */
+.location-section {
+  margin-bottom: 12px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px dashed #ccc;
+}
+
+.location-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.location-button {
+  padding: 8px 14px;
+  background-color: #27ae60;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.location-button:hover:not(:disabled) {
+  background-color: #219150;
+}
+
+.location-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.location-button-remove {
+  padding: 8px 14px;
+  background-color: transparent;
+  color: #e74c3c;
+  border: 1px solid #e74c3c;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.location-button-remove:hover {
+  
+  background-color: #f71900;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+}
+
+.location-error {
+  margin: 8px 0 0 0;
+  color: #e74c3c;
+  font-size: 0.85rem;
+}
+
+.location-info {
+  margin-top: 10px;
+}
+
+.location-label-text {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.location-coords {
+  margin: 4px 0 0 0;
+  color: #666;
+}
+
+/* Estilos de Imagem */
 .image-section {
   display: flex;
   align-items: center;
@@ -367,5 +527,3 @@ function handleCancel() {
   color: #888;
 }
 </style>
-
-
